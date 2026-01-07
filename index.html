@@ -2,37 +2,33 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>金星の満ち欠けシミュレーター V2</title>
+    <title>金星満ち欠けシミュレーター（地球・太陽固定）</title>
     <style>
-        body { background-color: #0a0a0c; color: #e0e0e0; font-family: 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 20px; }
-        .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
-        canvas { border: 1px solid #333; background-color: #000; border-radius: 4px; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
-        .controls { margin-bottom: 20px; padding: 20px; background: #1a1a1d; border-radius: 12px; border: 1px solid #333; text-align: center; }
-        button { padding: 10px 20px; font-size: 14px; cursor: pointer; background: #333; color: white; border: 1px solid #555; border-radius: 5px; transition: 0.3s; }
-        button.active { background: #007bff; border-color: #00bfff; }
-        input[type=range] { vertical-align: middle; }
-        .label { font-size: 1.1em; font-weight: bold; margin-bottom: 10px; color: #aaa; }
-        span.val { color: #ff0; font-weight: bold; }
+        body { background-color: #0a0a0c; color: #e0e0e0; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 20px; }
+        .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; }
+        canvas { border: 1px solid #444; background-color: #000; border-radius: 8px; }
+        .controls { margin-bottom: 20px; padding: 15px; background: #1a1a1d; border-radius: 10px; border: 1px solid #333; }
+        .label { font-size: 1.1em; font-weight: bold; margin-bottom: 10px; text-align: center; color: #aaa; }
     </style>
 </head>
 <body>
 
-    <h2>金星の公転と満ち欠けシミュレーション</h2>
+    <h2>金星の満ち欠け：地球・太陽固定モデル</h2>
 
     <div class="controls">
-        速度: <input type="range" id="speedRange" min="0" max="0.03" step="0.001" value="0.008">
-        <button id="fixEarthBtn">地球を固定する: OFF</button>
-        <p><small>※反時計回りに公転します。地球固定では地球を基準にした金星の動きが見えます。</small></p>
+        公転速度: <input type="range" id="speedRange" min="0" max="0.05" step="0.001" value="0.015">
+        <span>（反時計回り）</span>
     </div>
 
     <div class="container">
         <div>
-            <div class="label" id="orbitLabel">1. 太陽系俯瞰図</div>
-            <canvas id="orbitCanvas" width="500" height="500"></canvas>
+            <div class="label">1. 位置関係 (地球と太陽を固定)</div>
+            <canvas id="orbitCanvas" width="450" height="500"></canvas>
         </div>
+
         <div>
             <div class="label">2. 地球から見た金星</div>
-            <canvas id="viewCanvas" width="500" height="500"></canvas>
+            <canvas id="viewCanvas" width="450" height="500"></canvas>
         </div>
     </div>
 
@@ -42,127 +38,95 @@
         const viewCanvas = document.getElementById('viewCanvas');
         const viewCtx = viewCanvas.getContext('2d');
         const speedInput = document.getElementById('speedRange');
-        const fixBtn = document.getElementById('fixEarthBtn');
 
-        let angleEarth = 0;
-        let angleVenus = 0;
-        let isEarthFixed = false;
-
-        const cx = 250, cy = 250;
-        const orbitVenus = 100;
-        const orbitEarth = 180;
-
-        fixBtn.onclick = () => {
-            isEarthFixed = !isEarthFixed;
-            fixBtn.textContent = `地球を固定する: ${isEarthFixed ? 'ON' : 'OFF'}`;
-            fixBtn.classList.toggle('active');
-            document.getElementById('orbitLabel').textContent = isEarthFixed ? "1. 地球基準の相対運動" : "1. 太陽系俯瞰図";
-        };
+        let angleVenus = Math.PI / 2; // 金星の初期位置
+        const cx = 225, cy = 250; // キャンバス中心
+        
+        // 固定位置の設定
+        const sunY = 200;    // 太陽のY座標
+        const earthY = 420;  // 地球のY座標
+        const orbitR = 120;  // 金星の公転半径（太陽中心）
 
         function draw() {
-            orbitCtx.clearRect(0, 0, 500, 500);
-            viewCtx.clearRect(0, 0, 500, 500);
+            orbitCtx.clearRect(0, 0, 450, 500);
+            viewCtx.clearRect(0, 0, 450, 500);
 
-            // 公転計算（反時計回り：角度をマイナス方向に進める）
-            const speed = parseFloat(speedInput.value);
-            angleEarth -= speed; 
-            angleVenus -= speed * 1.625; // 金星の公転周期（約225日）
-
-            // 位置計算
-            let ex = orbitEarth * Math.cos(angleEarth);
-            let ey = orbitEarth * Math.sin(angleEarth);
-            let vx = orbitVenus * Math.cos(angleVenus);
-            let vy = orbitVenus * Math.sin(angleVenus);
-            let sx = 0, sy = 0; // 太陽
-
-            // 地球固定モードの場合の座標変換
-            let drawEx = ex, drawEy = ey, drawVx = vx, drawVy = vy, drawSx = sx, drawSy = sy;
-            if (isEarthFixed) {
-                // 地球を画面中心(cx, cy)に持ってくるためのオフセット
-                drawEx = 0; drawEy = 0;
-                drawVx = vx - ex; drawVy = vy - ey;
-                drawSx = sx - ex; drawSy = sy - ey;
-            }
-
-            // --- 1. 左側：公転図 ---
-            orbitCtx.save();
-            orbitCtx.translate(cx, cy);
-
-            // 太陽
+            // --- 1. 位置関係の描画 ---
+            // 太陽（固定）
             orbitCtx.fillStyle = "yellow";
             orbitCtx.shadowBlur = 15; orbitCtx.shadowColor = "orange";
-            orbitCtx.beginPath(); orbitCtx.arc(drawSx, drawSy, 20, 0, Math.PI * 2); orbitCtx.fill();
+            orbitCtx.beginPath(); orbitCtx.arc(cx, sunY, 25, 0, Math.PI * 2); orbitCtx.fill();
             orbitCtx.shadowBlur = 0;
+            orbitCtx.fillStyle = "white"; orbitCtx.fillText("太陽", cx - 12, sunY - 35);
 
-            // 軌道（太陽中心の軌道は地球固定時は描かないか、形が変わるため補助線として）
+            // 金星の軌道（太陽中心）
             orbitCtx.strokeStyle = "#333";
             orbitCtx.setLineDash([5, 5]);
-            if(!isEarthFixed) {
-                orbitCtx.beginPath(); orbitCtx.arc(0, 0, orbitVenus, 0, Math.PI * 2); orbitCtx.stroke();
-                orbitCtx.beginPath(); orbitCtx.arc(0, 0, orbitEarth, 0, Math.PI * 2); orbitCtx.stroke();
-            }
+            orbitCtx.beginPath(); orbitCtx.arc(cx, sunY, orbitR, 0, Math.PI * 2); orbitCtx.stroke();
 
-            // 地球と金星を結ぶ線
-            orbitCtx.strokeStyle = "rgba(0, 255, 255, 0.3)";
-            orbitCtx.setLineDash([2, 2]);
-            orbitCtx.beginPath(); orbitCtx.moveTo(drawEx, drawEy); orbitCtx.lineTo(drawVx, drawVy); orbitCtx.stroke();
-
-            // 地球
+            // 地球（固定）
             orbitCtx.fillStyle = "#44f";
-            orbitCtx.beginPath(); orbitCtx.arc(drawEx, drawEy, 10, 0, Math.PI * 2); orbitCtx.fill();
-            orbitCtx.fillStyle = "white"; orbitCtx.fillText("地球", drawEx + 12, drawEy + 4);
+            orbitCtx.beginPath(); orbitCtx.arc(cx, earthY, 12, 0, Math.PI * 2); orbitCtx.fill();
+            orbitCtx.fillStyle = "white"; orbitCtx.fillText("地球", cx - 12, earthY + 25);
+
+            // 金星の位置計算（太陽中心に反時計回り）
+            const vx = cx + orbitR * Math.cos(angleVenus);
+            const vy = sunY + orbitR * Math.sin(angleVenus);
+
+            // 地球と金星を結ぶ点線
+            orbitCtx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+            orbitCtx.setLineDash([2, 2]);
+            orbitCtx.beginPath(); orbitCtx.moveTo(cx, earthY); orbitCtx.lineTo(vx, vy); orbitCtx.stroke();
 
             // 金星
             orbitCtx.fillStyle = "#ff0";
-            orbitCtx.beginPath(); orbitCtx.arc(drawVx, drawVy, 7, 0, Math.PI * 2); orbitCtx.fill();
-            orbitCtx.fillText("金星", drawVx + 12, drawVy + 4);
-            
-            orbitCtx.restore();
+            orbitCtx.beginPath(); orbitCtx.arc(vx, vy, 8, 0, Math.PI * 2); orbitCtx.fill();
 
-            // --- 2. 右側：地球から見た金星 ---
+            // --- 2. 地球から見た満ち欠けの描画 ---
             // 地球から見た金星のベクトル
-            const dx = vx - ex;
-            const dy = vy - ey;
+            const dx = vx - cx;
+            const dy = vy - earthY;
             const dist = Math.sqrt(dx*dx + dy*dy);
             
-            // 地球から見た太陽の角度と金星の角度
-            const angleToSun = Math.atan2(-ey, -ex);
-            const angleToVenus = Math.atan2(vy - ey, vx - ex);
-            
-            // 離角（地球から見た太陽と金星の角度差）
-            const elongation = angleToVenus - angleToSun;
-            const phase = (1 + Math.cos(elongation)) / 2; // 0(新月)〜1(満月)
+            // 離角（地球から見た太陽と金星の角度差）の計算
+            // 地球から見て太陽は真上(北)にあるとする
+            const angleToVenus = Math.atan2(dy, dx);
+            const sunToEarthAngle = -Math.PI / 2; // 真上方向
+            const elongation = angleToVenus - sunToEarthAngle;
 
             viewCtx.save();
-            viewCtx.translate(250, 250);
+            viewCtx.translate(225, 250);
             
-            // 表示サイズ（距離が近いほど大きく：最大内合で大きく、外合で小さく）
-            const displayR = 12000 / dist;
+            // 距離に応じて大きさを変える（内合で大きく、外合で小さく）
+            const displayR = 12000 / dist; 
 
-            // 金星の「影」の向き（太陽と反対側を向く）
+            // 金星の向き（常に太陽の方角が明るくなるように回転）
             viewCtx.rotate(angleToVenus + Math.PI/2);
 
-            // 背景（暗い部分）
+            // 土台（暗い部分）
             viewCtx.fillStyle = "#111";
             viewCtx.beginPath(); viewCtx.arc(0, 0, displayR, 0, Math.PI * 2); viewCtx.fill();
 
-            // 満ち欠けの描画
+            // 光が当たっている部分
             viewCtx.fillStyle = "#fffca0";
             const cosE = Math.cos(elongation);
             
-            // 右側の半円
             viewCtx.beginPath();
             viewCtx.arc(0, 0, displayR, -Math.PI/2, Math.PI/2, false);
-            
-            // 左側の弧（位相によって形を変える）
-            // cosE > 0 なら膨らみ、cosE < 0 なら凹む
+            // 位相に合わせて楕円で影の境界を描く
             viewCtx.ellipse(0, 0, displayR * Math.abs(cosE), displayR, 0, Math.PI/2, -Math.PI/2, cosE < 0);
             viewCtx.fill();
-
             viewCtx.restore();
 
+            // 更新
+            angleVenus -= parseFloat(speedInput.value); // 反時計回り
             requestAnimationFrame(draw);
         }
+
+        draw();
+    </script>
+</body>
+</html>
 
         draw();
     </script>
