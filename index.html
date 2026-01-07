@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>金星の満ち欠けシミュレーター</title>
+    <style>
+        body { background-color: #050505; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; }
+        canvas { border: 1px solid #444; background-color: #000; margin: 10px; }
+        .container { display: flex; flex-wrap: wrap; justify-content: center; }
+        .controls { margin: 20px; padding: 15px; background: #222; border-radius: 8px; }
+        .label { text-align: center; font-weight: bold; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <h2>金星の公転と満ち欠けシミュレーション</h2>
+
+    <div class="controls">
+        速度調整: <input type="range" id="speedRange" min="0" max="0.05" step="0.001" value="0.01">
+        <p><small>金星は地球より内側を速く公転しています</small></p>
+    </div>
+
+    <div class="container">
+        <div>
+            <div class="label">1. 太陽系俯瞰図 (位置関係)</div>
+            <canvas id="orbitCanvas" width="400" height="400"></canvas>
+        </div>
+
+        <div>
+            <div class="label">2. 地球から見た金星 (満ち欠け)</div>
+            <canvas id="viewCanvas" width="400" height="400"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const orbitCanvas = document.getElementById('orbitCanvas');
+        const orbitCtx = orbitCanvas.getContext('2d');
+        const viewCanvas = document.getElementById('viewCanvas');
+        const viewCtx = viewCanvas.getContext('2d');
+        const speedInput = document.getElementById('speedRange');
+
+        let angleEarth = 0;
+        let angleVenus = 0;
+
+        // 定数設定
+        const centerX = 200, centerY = 200;
+        const sunRadius = 20;
+        const orbitVenus = 80;  // 金星の軌道半径
+        const orbitEarth = 150; // 地球の軌道半径
+
+        function draw() {
+            // キャンバスのリセット
+            orbitCtx.clearRect(0, 0, 400, 400);
+            viewCtx.clearRect(0, 0, 400, 400);
+
+            // --- 1. 公転シミュレーションの描画 ---
+            // 太陽
+            orbitCtx.fillStyle = "yellow";
+            orbitCtx.beginPath();
+            orbitCtx.arc(centerX, centerY, sunRadius, 0, Math.PI * 2);
+            orbitCtx.fill();
+
+            // 軌道(点線)
+            orbitCtx.strokeStyle = "#444";
+            orbitCtx.setLineDash([5, 5]);
+            orbitCtx.beginPath(); orbitCtx.arc(centerX, centerY, orbitVenus, 0, Math.PI * 2); orbitCtx.stroke();
+            orbitCtx.beginPath(); orbitCtx.arc(centerX, centerY, orbitEarth, 0, Math.PI * 2); orbitCtx.stroke();
+
+            // 地球の位置
+            const ex = centerX + orbitEarth * Math.cos(angleEarth);
+            const ey = centerY + orbitEarth * Math.sin(angleEarth);
+            orbitCtx.fillStyle = "#44f";
+            orbitCtx.beginPath(); orbitCtx.arc(ex, ey, 8, 0, Math.PI * 2); orbitCtx.fill();
+            orbitCtx.fillText("地球", ex + 10, ey + 10);
+
+            // 金星の位置
+            const vx = centerX + orbitVenus * Math.cos(angleVenus);
+            const vy = centerY + orbitVenus * Math.sin(angleVenus);
+            orbitCtx.fillStyle = "#ff0";
+            orbitCtx.beginPath(); orbitCtx.arc(vx, vy, 6, 0, Math.PI * 2); orbitCtx.fill();
+            orbitCtx.fillText("金星", vx + 10, vy + 10);
+
+            // 地球と金星を結ぶ点線
+            orbitCtx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+            orbitCtx.beginPath();
+            orbitCtx.moveTo(ex, ey);
+            orbitCtx.lineTo(vx, vy);
+            orbitCtx.stroke();
+
+            // --- 2. 地球から見た満ち欠けの描画 ---
+            // 地球から見た金星の相対的な角度と距離を計算
+            const dx = vx - ex;
+            const dy = vy - ey;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+            
+            // 地球から太陽、地球から金星への角度差（離角）を計算
+            const angleToSun = Math.atan2(centerY - ey, centerX - ex);
+            const angleToVenus = Math.atan2(vy - ey, vx - ex);
+            let phaseAngle = angleToVenus - angleToSun;
+
+            // 金星の大きさ（距離が近いほど大きく表示）
+            const displayRadius = 8000 / distance; 
+
+            viewCtx.save();
+            viewCtx.translate(200, 200);
+            // 金星の向きを調整（太陽の方向が常に光るように）
+            viewCtx.rotate(angleToVenus + Math.PI/2); 
+
+            // 暗い部分（円全体）
+            viewCtx.fillStyle = "#222";
+            viewCtx.beginPath();
+            viewCtx.arc(0, 0, displayRadius, 0, Math.PI * 2);
+            viewCtx.fill();
+
+            // 光っている部分の描画（ベジェ曲線で満ち欠けを表現）
+            const s = Math.cos(angleVenus - angleEarth); // 簡易的な位相計算
+            
+            viewCtx.fillStyle = "#fffca0";
+            viewCtx.beginPath();
+            // 右半分（常に太陽側を向いている前提での描画ロジック）
+            // 地球・金星・太陽のなす角を計算して、塗りつぶし範囲を決定
+            const angleBetween = angleVenus - angleEarth;
+            const cosA = Math.cos(angleVenus - angleEarth);
+            
+            // 満ち欠けのアルゴリズム
+            // 実際には「太陽-金星-地球」のなす角（離角）で決まる
+            const viewPhase = Math.cos(angleVenus - angleEarth);
+            
+            // 簡易的な満ち欠け描画
+            for (let i = -Math.PI/2; i < Math.PI/2; i += 0.01) {
+                let x = Math.cos(i) * displayRadius;
+                let y = Math.sin(i) * displayRadius;
+                // 反対側の弧を位相（cos）で圧縮して描画
+                let x2 = -Math.cos(i) * displayRadius * viewPhase;
+                if(i === -Math.PI/2) viewCtx.moveTo(x, y);
+                else viewCtx.lineTo(x, y);
+            }
+            for (let i = Math.PI/2; i > -Math.PI/2; i -= 0.01) {
+                let x2 = Math.cos(i) * displayRadius * viewPhase;
+                let y = Math.sin(i) * displayRadius;
+                viewCtx.lineTo(x2, y);
+            }
+            viewCtx.fill();
+            viewCtx.restore();
+
+            // 数値更新
+            const speed = parseFloat(speedInput.value);
+            angleEarth += speed;
+            angleVenus += speed * 1.62; // 金星は地球より速い (約0.62年で1公転)
+
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+    </script>
+</body>
+</html>
