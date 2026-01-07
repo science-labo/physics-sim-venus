@@ -75,3 +75,81 @@
                 ex = sx + orbitR_E * Math.cos(angleEarth);
                 ey = sy + orbitR_E * Math.sin(angleEarth);
                 vx = sx + orbitR_V * Math.cos(angleVenus);
+                vy = sy + orbitR_V * Math.sin(angleVenus);
+            }
+
+            // --- 1. 左側：宇宙の位置関係 ---
+            // 太陽
+            orbitCtx.fillStyle = "yellow";
+            orbitCtx.beginPath(); orbitCtx.arc(sx, sy, 20, 0, Math.PI * 2); orbitCtx.fill();
+            
+            // 金星（常に太陽側を白く、反対を黒く）
+            orbitCtx.save();
+            orbitCtx.translate(vx, vy);
+            orbitCtx.rotate(Math.atan2(sy-vy, sx-vx));
+            orbitCtx.fillStyle = "#333"; orbitCtx.beginPath(); orbitCtx.arc(0,0, 10, Math.PI/2, -Math.PI/2); orbitCtx.fill();
+            orbitCtx.fillStyle = "#fffca0"; orbitCtx.beginPath(); orbitCtx.arc(0,0, 10, -Math.PI/2, Math.PI/2); orbitCtx.fill();
+            orbitCtx.restore();
+
+            // 地球
+            orbitCtx.fillStyle = "#44f";
+            orbitCtx.beginPath(); orbitCtx.arc(ex, ey, 12, 0, Math.PI * 2); orbitCtx.fill();
+
+            // --- 2. 右側：地球から見た金星の相 ---
+            const dist = Math.sqrt((vx-ex)**2 + (vy-ey)**2);
+            
+            // 離角の計算
+            const angSun = Math.atan2(sy-ey, sx-ex);
+            const angVen = Math.atan2(vy-ey, vx-ex);
+            let elong = angVen - angSun;
+            while (elong <= -Math.PI) elong += Math.PI * 2;
+            while (elong > Math.PI) elong -= Math.PI * 2;
+
+            // 位相角（輝面比計算用）
+            const dEV = dist;
+            const dSV = orbitR_V;
+            const dSE = Math.sqrt((ex-sx)**2 + (ey-sy)**2);
+            // 余弦定理より位相角を計算
+            let phaseAngle = Math.acos(Math.max(-1, Math.min(1, (dSV*dSV + dEV*dEV - dSE*dSE) / (2 * dSV * dEV))));
+
+            viewCtx.save();
+            viewCtx.translate(225, 225);
+            const r = 13000 / dist; // 距離によるサイズ変化
+
+            // 影（ベースの円）
+            viewCtx.fillStyle = "#222";
+            viewCtx.beginPath(); viewCtx.arc(0, 0, r, 0, Math.PI * 2); viewCtx.fill();
+
+            // 輝面比率 k (0=新月, 1=満月)
+            const k = (1 + Math.cos(phaseAngle)) / 2; 
+            // 楕円の幅（影の境界線）
+            const borderX = r * (2 * k - 1); 
+
+            viewCtx.fillStyle = "#fffca0";
+            viewCtx.beginPath();
+
+            // 判定を反転させました
+            // elong < 0 : 以前の「宵」の位置 -> 今回「宵の明星（右側光る）」に設定
+            if (elong < 0) { 
+                statusLabel.textContent = "宵の明星 (夕方：右側が光る)";
+                // 右側半円を描く
+                viewCtx.arc(0, 0, r, -Math.PI/2, Math.PI/2, false);
+                // 境界線を楕円で描く
+                viewCtx.ellipse(0, 0, Math.abs(borderX), r, 0, Math.PI/2, -Math.PI/2, borderX < 0);
+            } else {
+                statusLabel.textContent = "明けの明星 (明け方：左側が光る)";
+                // 左側半円を描く
+                viewCtx.arc(0, 0, r, Math.PI/2, -Math.PI/2, false);
+                // 境界線を楕円で描く
+                viewCtx.ellipse(0, 0, Math.abs(borderX), r, 0, -Math.PI/2, Math.PI/2, borderX < 0);
+            }
+            
+            viewCtx.fill();
+            viewCtx.restore();
+
+            requestAnimationFrame(draw);
+        }
+        draw();
+    </script>
+</body>
+</html>
