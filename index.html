@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>金星満ち欠けシミュレーター（正確な位相版）</title>
+    <title>金星満ち欠けシミュレーター（画像準拠版）</title>
     <style>
         body { background-color: #050508; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 20px; }
         .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; }
@@ -10,8 +10,7 @@
         .controls { margin-bottom: 20px; padding: 15px; background: #1a1a1d; border-radius: 10px; border: 1px solid #444; text-align: center; }
         button { padding: 8px 15px; cursor: pointer; background: #333; color: #fff; border: 1px solid #666; border-radius: 4px; }
         button.active { background: #ce9d00; border-color: #ffda62; color: #000; font-weight: bold; }
-        .legend { margin-top: 10px; font-size: 0.9em; display: flex; gap: 20px; justify-content: center; }
-        .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+        .info-panel { margin-top: 10px; min-height: 24px; color: #ffda62; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -22,20 +21,16 @@
         <button id="modeNormal" class="active">公転モード</button>
         <button id="modeFixed">地球・太陽 固定モード</button>
         &nbsp; 速度: <input type="range" id="speedRange" min="0" max="0.04" step="0.001" value="0.01">
-        <div class="legend">
-            <span><span class="dot" style="background: yellow;"></span> 太陽</span>
-            <span><span class="dot" style="background: #44f;"></span> 地球</span>
-            <span><span class="dot" style="background: #ff0;"></span> 金星</span>
-        </div>
+        <div class="info-panel" id="statusLabel">読み込み中...</div>
     </div>
 
     <div class="container">
         <div>
-            <div style="text-align:center; margin-bottom:8px;">1. 宇宙から見た光の当たり方</div>
+            <div style="text-align:center; margin-bottom:8px;">1. 宇宙から見た位置関係</div>
             <canvas id="orbitCanvas" width="450" height="450"></canvas>
         </div>
         <div>
-            <div style="text-align:center; margin-bottom:8px;">2. 地球から見た満ち欠け</div>
+            <div style="text-align:center; margin-bottom:8px;">2. 地球から見た金星（満ち欠け）</div>
             <canvas id="viewCanvas" width="450" height="450"></canvas>
         </div>
     </div>
@@ -46,9 +41,10 @@
         const viewCanvas = document.getElementById('viewCanvas');
         const viewCtx = viewCanvas.getContext('2d');
         const speedInput = document.getElementById('speedRange');
+        const statusLabel = document.getElementById('statusLabel');
 
         let angleEarth = -Math.PI / 2;
-        let angleVenus = -Math.PI / 2 + 1.0; 
+        let angleVenus = -Math.PI / 2 + 0.8; 
         let isFixedMode = false;
 
         const cx = 225, cy = 225;
@@ -67,14 +63,11 @@
             angleEarth -= speed; 
             angleVenus -= speed * 1.62;
 
-            // 1. 座標の確定
-            let sx = cx, sy = cy; // 太陽位置
+            let sx = cx, sy = cy;
             let ex, ey, vx, vy;
 
             if (isFixedMode) {
-                // 地球と太陽を固定（地球：下、太陽：中央）
                 ex = cx; ey = cy + 180;
-                // 地球から見た相対的な金星の角度を計算
                 let relAngle = angleVenus - angleEarth - Math.PI/2;
                 vx = sx + orbitR_V * Math.cos(relAngle);
                 vy = sy + orbitR_V * Math.sin(relAngle);
@@ -85,71 +78,66 @@
                 vy = sy + orbitR_V * Math.sin(angleVenus);
             }
 
-            // --- 左側：宇宙での光の当たり方 ---
-            // 太陽光の放射（補助線）
-            orbitCtx.strokeStyle = "rgba(255,255,0,0.1)";
-            orbitCtx.setLineDash([]);
-            orbitCtx.beginPath(); orbitCtx.moveTo(sx,sy); orbitCtx.lineTo(vx,vy); orbitCtx.stroke();
-
+            // --- 1. 左側：位置関係 ---
             // 太陽
             orbitCtx.fillStyle = "yellow";
-            orbitCtx.shadowBlur = 20; orbitCtx.shadowColor = "orange";
-            orbitCtx.beginPath(); orbitCtx.arc(sx, sy, 22, 0, Math.PI * 2); orbitCtx.fill();
-            orbitCtx.shadowBlur = 0;
-
-            // 金星の描画（常に太陽側半分を白く、反対を黒く）
+            orbitCtx.beginPath(); orbitCtx.arc(sx, sy, 20, 0, Math.PI * 2); orbitCtx.fill();
+            
+            // 金星
             orbitCtx.save();
             orbitCtx.translate(vx, vy);
             orbitCtx.rotate(Math.atan2(sy-vy, sx-vx));
-            // 影の側
             orbitCtx.fillStyle = "#333";
-            orbitCtx.beginPath(); orbitCtx.arc(0,0, 10, Math.PI/2, -Math.PI/2); orbitCtx.fill();
-            // 光の側
+            orbitCtx.beginPath(); orbitCtx.arc(0,0, 8, Math.PI/2, -Math.PI/2); orbitCtx.fill();
             orbitCtx.fillStyle = "#fffca0";
-            orbitCtx.beginPath(); orbitCtx.arc(0,0, 10, -Math.PI/2, Math.PI/2); orbitCtx.fill();
+            orbitCtx.beginPath(); orbitCtx.arc(0,0, 8, -Math.PI/2, Math.PI/2); orbitCtx.fill();
             orbitCtx.restore();
 
-            // 地球（夜側を黒く）
-            orbitCtx.save();
-            orbitCtx.translate(ex, ey);
-            orbitCtx.rotate(Math.atan2(sy-ey, sx-ex));
-            orbitCtx.fillStyle = "#111";
-            orbitCtx.beginPath(); orbitCtx.arc(0,0, 12, Math.PI/2, -Math.PI/2); orbitCtx.fill();
+            // 地球
             orbitCtx.fillStyle = "#44f";
-            orbitCtx.beginPath(); orbitCtx.arc(0,0, 12, -Math.PI/2, Math.PI/2); orbitCtx.fill();
-            orbitCtx.restore();
+            orbitCtx.beginPath(); orbitCtx.arc(ex, ey, 10, 0, Math.PI * 2); orbitCtx.fill();
 
-            // --- 右側：地球から見た満ち欠け ---
+            // --- 2. 右側：地球から見た満ち欠け ---
             const dist = Math.sqrt((vx-ex)**2 + (vy-ey)**2);
-            // 離角（地球から見た太陽と金星のなす角）
             const angleToSun = Math.atan2(sy-ey, sx-ex);
             const angleToVenus = Math.atan2(vy-ey, vx-ex);
+            
+            // 離角（地球から見た太陽と金星の角度差）
             let elongation = angleToVenus - angleToSun;
+            // 角度を -PI から PI の範囲に正規化
+            while (elongation <= -Math.PI) elongation += Math.PI * 2;
+            while (elongation > Math.PI) elongation -= Math.PI * 2;
+
+            // ステータス表示
+            if (Math.abs(elongation) < 0.1) statusLabel.textContent = "観測できない（内合・外合付近）";
+            else if (elongation > 0) statusLabel.textContent = "宵の明星（夕方、太陽の後に沈む）";
+            else statusLabel.textContent = "明けの明星（明け方、太陽より先に昇る）";
 
             viewCtx.save();
             viewCtx.translate(225, 225);
-            viewCtx.rotate(angleToVenus + Math.PI/2); // 金星の高度方向に合わせる
+            
+            // 画像に基づき、満ち欠けの形を垂直に保つ（比較しやすくするため）
+            const r = 12000 / dist; 
 
-            const r = 10000 / dist; // 近いほど大きく
-
-            // 背面の暗い球体
-            viewCtx.fillStyle = "#151515";
+            // 暗い部分（球体）
+            viewCtx.fillStyle = "#222";
             viewCtx.beginPath(); viewCtx.arc(0, 0, r, 0, Math.PI * 2); viewCtx.fill();
 
-            // 太陽の光が当たっている部分を物理的にシミュレート
-            // 満ち欠けの境界を楕円関数で表現
+            // 光る部分の描画
             viewCtx.fillStyle = "#fffca0";
             const phaseCos = Math.cos(elongation);
             
             viewCtx.beginPath();
-            // 常に太陽側の半円を描画
-            viewCtx.arc(0, 0, r, -Math.PI/2, Math.PI/2, false);
-            
-            // 境界線（明暗境界線）の描画
-            // phaseCosが正なら満ちていき、負なら三日月になる
-            viewCtx.ellipse(0, 0, r * Math.abs(phaseCos), r, 0, Math.PI/2, -Math.PI/2, phaseCos < 0);
+            if (elongation > 0) {
+                // 宵の明星：右側が光る
+                viewCtx.arc(0, 0, r, -Math.PI/2, Math.PI/2, false);
+                viewCtx.ellipse(0, 0, r * Math.abs(phaseCos), r, 0, Math.PI/2, -Math.PI/2, phaseCos < 0);
+            } else {
+                // 明けの明星：左側が光る
+                viewCtx.arc(0, 0, r, Math.PI/2, -Math.PI/2, false);
+                viewCtx.ellipse(0, 0, r * Math.abs(phaseCos), r, 0, -Math.PI/2, Math.PI/2, phaseCos < 0);
+            }
             viewCtx.fill();
-            
             viewCtx.restore();
 
             requestAnimationFrame(draw);
