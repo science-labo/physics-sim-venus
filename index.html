@@ -2,20 +2,20 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>金星満ち欠けシミュレーター（画像準拠・120度調整版）</title>
+    <title>幾何学的に正確な金星満ち欠けシミュレーター</title>
     <style>
         body { background-color: #050508; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 20px; }
         .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; }
-        canvas { border: 1px solid #333; background: radial-gradient(circle, #111 0%, #000 100%); border-radius: 8px; }
+        canvas { border: 1px solid #333; background: #000; border-radius: 8px; }
         .controls { margin-bottom: 20px; padding: 15px; background: #1a1a1d; border-radius: 10px; border: 1px solid #444; text-align: center; }
         button { padding: 8px 15px; cursor: pointer; background: #333; color: #fff; border: 1px solid #666; border-radius: 4px; }
         button.active { background: #ce9d00; border-color: #ffda62; color: #000; font-weight: bold; }
-        .status-info { margin-top: 10px; color: #ffda62; font-weight: bold; min-height: 20px; }
+        .status-info { margin-top: 10px; color: #ffda62; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h2>金星の満ち欠けシミュレーター</h2>
+    <h2>金星の満ち欠けシミュレーター（幾何学正確版）</h2>
 
     <div class="controls">
         <button id="modeNormal" class="active">公転モード</button>
@@ -26,11 +26,11 @@
 
     <div class="container">
         <div>
-            <div style="text-align:center; margin-bottom:8px;">1. 宇宙から見た位置関係</div>
+            <div style="text-align:center; margin-bottom:8px;">1. 太陽光の当たり方（物理）</div>
             <canvas id="orbitCanvas" width="450" height="450"></canvas>
         </div>
         <div>
-            <div style="text-align:center; margin-bottom:8px;">2. 地球から見た金星（拡大）</div>
+            <div style="text-align:center; margin-bottom:8px;">2. 地球から見た位相（正確な計算）</div>
             <canvas id="viewCanvas" width="450" height="450"></canvas>
         </div>
     </div>
@@ -78,63 +78,68 @@
                 vy = sy + orbitR_V * Math.sin(angleVenus);
             }
 
-            // --- 1. 左側描画 ---
+            // --- 1. 左側：太陽光と金星の物理的な向き ---
+            // 太陽
             orbitCtx.fillStyle = "yellow";
             orbitCtx.beginPath(); orbitCtx.arc(sx, sy, 20, 0, Math.PI * 2); orbitCtx.fill();
             
+            // 金星（常に太陽側が明るい）
             orbitCtx.save();
             orbitCtx.translate(vx, vy);
             orbitCtx.rotate(Math.atan2(sy-vy, sx-vx));
-            orbitCtx.fillStyle = "#333"; orbitCtx.beginPath(); orbitCtx.arc(0,0, 8, Math.PI/2, -Math.PI/2); orbitCtx.fill();
-            orbitCtx.fillStyle = "#fffca0"; orbitCtx.beginPath(); orbitCtx.arc(0,0, 8, -Math.PI/2, Math.PI/2); orbitCtx.fill();
+            orbitCtx.fillStyle = "#333"; orbitCtx.beginPath(); orbitCtx.arc(0,0, 10, Math.PI/2, -Math.PI/2); orbitCtx.fill();
+            orbitCtx.fillStyle = "#fffca0"; orbitCtx.beginPath(); orbitCtx.arc(0,0, 10, -Math.PI/2, Math.PI/2); orbitCtx.fill();
             orbitCtx.restore();
 
+            // 地球
             orbitCtx.fillStyle = "#44f";
-            orbitCtx.beginPath(); orbitCtx.arc(ex, ey, 10, 0, Math.PI * 2); orbitCtx.fill();
+            orbitCtx.beginPath(); orbitCtx.arc(ex, ey, 12, 0, Math.PI * 2); orbitCtx.fill();
 
-            // --- 2. 右側描画 (地球からの見え方) ---
+            // --- 2. 右側：地球から見た「太陽が当たっている面」の投影 ---
             const dist = Math.sqrt((vx-ex)**2 + (vy-ey)**2);
-            const angleToSun = Math.atan2(sy-ey, sx-ex);
-            const angleToVenus = Math.atan2(vy-ey, vx-ex);
             
-            let elongation = angleToVenus - angleToSun;
+            // 太陽-金星-地球のなす角(Phase Angle: β)を計算
+            // これが「太陽の当たっている面をどれだけ横から見ているか」を決定する
+            const dEV = dist;
+            const dSV = orbitR_V;
+            const dSE = Math.sqrt((ex-sx)**2 + (ey-sy)**2);
+            
+            // 余弦定理で金星中心の角βを求める
+            let phaseAngle = Math.acos((dSV*dSV + dEV*dEV - dSE*dSE) / (2 * dSV * dEV));
+            
+            // 地球から見た太陽と金星の離角（宵か明けかの判定用）
+            const angleSun = Math.atan2(sy-ey, sx-ex);
+            const angleVenusToEarth = Math.atan2(vy-ey, vx-ex);
+            let elongation = angleVenusToEarth - angleSun;
             while (elongation <= -Math.PI) elongation += Math.PI * 2;
             while (elongation > Math.PI) elongation -= Math.PI * 2;
 
-            // ラベルの更新
-            if (Math.abs(elongation) < 0.15) {
-                statusLabel.textContent = "観測できない (太陽と重なる)";
-            } else if (elongation > 0) {
-                statusLabel.textContent = "宵の明星 (夕方、西の空)";
-            } else {
-                statusLabel.textContent = "明けの明星 (明け方、東の空)";
-            }
+            statusLabel.textContent = elongation > 0 ? "宵の明星 (右側が光る)" : "明けの明星 (左側が光る)";
 
             viewCtx.save();
             viewCtx.translate(225, 225);
-            
-            // 画像のように、光る面を左右に固定して比較しやすくする
-            const r = 12500 / dist; 
+            const r = 13000 / dist; // 距離に応じたサイズ変更
 
-            // 暗い背景
+            // 影の部分
             viewCtx.fillStyle = "#222";
             viewCtx.beginPath(); viewCtx.arc(0, 0, r, 0, Math.PI * 2); viewCtx.fill();
 
-            // 光の面 (120度の時に画像の形になるよう調整)
+            // 光が当たっている面の投影描画
             viewCtx.fillStyle = "#fffca0";
-            // 物理的な位相(輝面比)を計算
-            const phaseCos = Math.cos(elongation);
+            
+            // 物理的に正しい位相の厚みは cos(phaseAngle) で決まる
+            const cosBeta = Math.cos(phaseAngle);
             
             viewCtx.beginPath();
             if (elongation > 0) {
-                // 宵の明星：右側が光る
+                // 右側半円をベースに、中央の境界線を楕円で描く
                 viewCtx.arc(0, 0, r, -Math.PI/2, Math.PI/2, false);
-                // 境界線を楕円で描画
-                viewCtx.ellipse(0, 0, r * Math.abs(phaseCos), r, 0, Math.PI/2, -Math.PI/2, phaseCos < 0);
+                // 太陽側が自分に近いか遠いかで境界線の曲がり方が変わる
+                viewCtx.ellipse(0, 0, r * Math.abs(cosBeta), r, 0, Math.PI/2, -Math.PI/2, cosBeta < 0);
             } else {
-                // 明けの明星：左側が光る
+                // 左側半円
                 viewCtx.arc(0, 0, r, Math.PI/2, -Math.PI/2, false);
-                viewCtx.ellipse(0, 0, r * Math.abs(phaseCos), r, 0, -Math.PI/2, Math.PI/2, phaseCos < 0);
+                viewCtx.ellipse(0, 0, r * Math.abs(cosBeta), r, 0, -Math.PI/2, Math.PI/2, cosBeta < 0);
             }
             viewCtx.fill();
             viewCtx.restore();
