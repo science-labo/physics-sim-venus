@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>幾何学的に正確な金星満ち欠けシミュレーター</title>
+    <title>金星満ち欠けシミュレーター（物理整合版）</title>
     <style>
         body { background-color: #050508; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 20px; }
         .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; }
@@ -15,7 +15,7 @@
 </head>
 <body>
 
-    <h2>金星の満ち欠けシミュレーター（幾何学正確版）</h2>
+    <h2>金星の満ち欠け（物理シミュレーション）</h2>
 
     <div class="controls">
         <button id="modeNormal" class="active">公転モード</button>
@@ -26,11 +26,11 @@
 
     <div class="container">
         <div>
-            <div style="text-align:center; margin-bottom:8px;">1. 太陽光の当たり方（物理）</div>
+            <div style="text-align:center; margin-bottom:8px;">1. 宇宙から見た位置関係</div>
             <canvas id="orbitCanvas" width="450" height="450"></canvas>
         </div>
         <div>
-            <div style="text-align:center; margin-bottom:8px;">2. 地球から見た位相（正確な計算）</div>
+            <div style="text-align:center; margin-bottom:8px;">2. 地球から見た満ち欠け</div>
             <canvas id="viewCanvas" width="450" height="450"></canvas>
         </div>
     </div>
@@ -44,7 +44,7 @@
         const statusLabel = document.getElementById('statusLabel');
 
         let angleEarth = -Math.PI / 2;
-        let angleVenus = -Math.PI / 2 + 1.2; 
+        let angleVenus = -Math.PI / 2 + 0.5; 
         let isFixedMode = false;
 
         const cx = 225, cy = 225;
@@ -78,12 +78,12 @@
                 vy = sy + orbitR_V * Math.sin(angleVenus);
             }
 
-            // --- 1. 左側：太陽光と金星の物理的な向き ---
+            // --- 1. 左側：宇宙の位置関係 ---
             // 太陽
             orbitCtx.fillStyle = "yellow";
             orbitCtx.beginPath(); orbitCtx.arc(sx, sy, 20, 0, Math.PI * 2); orbitCtx.fill();
             
-            // 金星（常に太陽側が明るい）
+            // 金星（物理的な光の当たり方）
             orbitCtx.save();
             orbitCtx.translate(vx, vy);
             orbitCtx.rotate(Math.atan2(sy-vy, sx-vx));
@@ -95,51 +95,48 @@
             orbitCtx.fillStyle = "#44f";
             orbitCtx.beginPath(); orbitCtx.arc(ex, ey, 12, 0, Math.PI * 2); orbitCtx.fill();
 
-            // --- 2. 右側：地球から見た「太陽が当たっている面」の投影 ---
+            // --- 2. 右側：地球から見た金星の相 ---
             const dist = Math.sqrt((vx-ex)**2 + (vy-ey)**2);
             
-            // 太陽-金星-地球のなす角(Phase Angle: β)を計算
-            // これが「太陽の当たっている面をどれだけ横から見ているか」を決定する
+            // 地球から見た太陽と金星の離角（Elongation）
+            const angSun = Math.atan2(sy-ey, sx-ex);
+            const angVen = Math.atan2(vy-ey, vx-ex);
+            let elong = angVen - angSun;
+            while (elong <= -Math.PI) elong += Math.PI * 2;
+            while (elong > Math.PI) elong -= Math.PI * 2;
+
+            // 物理的な位相角β（太陽-金星-地球の角）を算出
+            // 外合(遠い)でβ=0°(満月)、内合(近い)でβ=180°(新月)
             const dEV = dist;
             const dSV = orbitR_V;
             const dSE = Math.sqrt((ex-sx)**2 + (ey-sy)**2);
-            
-            // 余弦定理で金星中心の角βを求める
-            let phaseAngle = Math.acos((dSV*dSV + dEV*dEV - dSE*dSE) / (2 * dSV * dEV));
-            
-            // 地球から見た太陽と金星の離角（宵か明けかの判定用）
-            const angleSun = Math.atan2(sy-ey, sx-ex);
-            const angleVenusToEarth = Math.atan2(vy-ey, vx-ex);
-            let elongation = angleVenusToEarth - angleSun;
-            while (elongation <= -Math.PI) elongation += Math.PI * 2;
-            while (elongation > Math.PI) elongation -= Math.PI * 2;
+            let phaseAngle = Math.acos(Math.max(-1, Math.min(1, (dSV*dSV + dEV*dEV - dSE*dSE) / (2 * dSV * dEV))));
 
-            statusLabel.textContent = elongation > 0 ? "宵の明星 (右側が光る)" : "明けの明星 (左側が光る)";
+            statusLabel.textContent = elong > 0 ? "宵の明星 (夕方：右側が光る)" : "明けの明星 (明け方：左側が光る)";
 
             viewCtx.save();
             viewCtx.translate(225, 225);
-            const r = 13000 / dist; // 距離に応じたサイズ変更
+            const r = 13000 / dist; // 遠ざかるほど小さくなる
 
-            // 影の部分
+            // 影（金星の球体）
             viewCtx.fillStyle = "#222";
             viewCtx.beginPath(); viewCtx.arc(0, 0, r, 0, Math.PI * 2); viewCtx.fill();
 
-            // 光が当たっている面の投影描画
+            // 満ち欠け描画（太陽に向いている面を表示）
             viewCtx.fillStyle = "#fffca0";
-            
-            // 物理的に正しい位相の厚みは cos(phaseAngle) で決まる
-            const cosBeta = Math.cos(phaseAngle);
-            
+            const k = (1 + Math.cos(phaseAngle)) / 2; // 輝面比
+            const borderX = r * (2 * k - 1); // 影の境界線のX位置
+
             viewCtx.beginPath();
-            if (elongation > 0) {
-                // 右側半円をベースに、中央の境界線を楕円で描く
+            if (elong > 0) {
+                // 宵の明星（右側が光る）
                 viewCtx.arc(0, 0, r, -Math.PI/2, Math.PI/2, false);
-                // 太陽側が自分に近いか遠いかで境界線の曲がり方が変わる
-                viewCtx.ellipse(0, 0, r * Math.abs(cosBeta), r, 0, Math.PI/2, -Math.PI/2, cosBeta < 0);
+                // 境界線（k > 0.5 で膨らみ、k < 0.5 で三日月）
+                viewCtx.ellipse(0, 0, Math.abs(borderX), r, 0, Math.PI/2, -Math.PI/2, borderX < 0);
             } else {
-                // 左側半円
+                // 明けの明星（左側が光る）
                 viewCtx.arc(0, 0, r, Math.PI/2, -Math.PI/2, false);
-                viewCtx.ellipse(0, 0, r * Math.abs(cosBeta), r, 0, -Math.PI/2, Math.PI/2, cosBeta < 0);
+                viewCtx.ellipse(0, 0, Math.abs(borderX), r, 0, -Math.PI/2, Math.PI/2, borderX < 0);
             }
             viewCtx.fill();
             viewCtx.restore();
